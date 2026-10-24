@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CASHIER
+  DELIVERER
+}
+
+enum Unit {
+  KG
+  M
+  PIECE
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  PENDING
+}
+
+enum SyncStatus {
+  SYNCED
+  PENDING
+  FAILED
+}
+
+enum PaymentMethod {
+  CASH
+  MPESA
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+enum DeliveryStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+enum SessionStatus {
+  OPEN
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          UserRole
+  fullName      String
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  stockSessions StockSession[]
+  stockAdjustments StockAdjustment[]
+  sales         Sale[]
+  auditLogs     AuditLog[]
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  products    Product[]
+}
+
+model Product {
+  id            String    @id @default(uuid())
+  sku           String    @unique
+  barcode       String    @unique
+  name          String
+  description   String?
+  categoryId    String
+  category      Category   @relation(fields: [categoryId], references: [id])
+  unit          Unit
+  costPrice     Decimal   @db.Decimal(10, 2)
+  sellingPrice  Decimal   @db.Decimal(10, 2)
+  minStockLevel Int
+  currentStock  Int
+  supplierId    String?
+  supplier      Supplier?  @relation(fields: [supplierId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  saleItems     SaleItem[]
+  stockAdjustments StockAdjustment[]
+}
+
+model Supplier {
+  id           String    @id @default(uuid())
+  companyName  String
+  contactPerson String
+  phone        String
+  email        String?
+  address      String?
+  products     Product[]
+}
+
+model Customer {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  sales     Sale[]
+  deliveries Delivery[]
+}
+
+model Sale {
+  id            String    @id @default(uuid())
+  cashierId     String
+  cashier       User      @relation(fields: [cashierId], references: [id])
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  totalAmount   Decimal   @db.Decimal(10, 2)
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  syncStatus    SyncStatus @default(SYNCED)
+  deviceId      String
+  localId       String
+  saleItems     SaleItem[]
+  payments      Payment[]
+  delivery      Delivery?
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  saleId                String
+  sale                  Sale          @relation(fields: [saleId], references: [id])
+  method                PaymentMethod
+  amount                Decimal       @db.Decimal(10, 2)
+  transactionReference String?
+  verified              Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+}
+
+model StockSession {
+  id          String         @id @default(uuid())
+  adminId     String
+  admin       User           @relation(fields: [adminId], references: [id])
+  status      SessionStatus  @default(OPEN)
+  startedAt   DateTime       @default(now())
+  endedAt     DateTime?
+  adjustments StockAdjustment[]
+}
+
+model StockAdjustment {
+  id            String       @id @default(uuid())
+  sessionId     String
+  session       StockSession @relation(fields: [sessionId], references: [id])
+  productId    String
+  product       Product      @relation(fields: [productId], references: [id])
+  expectedQty   Int
+  actualQty     Int
+  adjustmentQty Int
+  reason        String
+  approvedBy    String
+  createdAt     DateTime     @default(now())
+  user          User         @relation(fields: [approvedBy], references: [id])
+}
+
+model Delivery {
+  id                  String         @id @default(uuid())
+  saleId              String         @unique
+  sale                Sale           @relation(fields: [saleId], references: [id])
+  delivererId         String
+  customerId          String
+  customer            Customer       @relation(fields: [customerId], references: [id])
+  status              DeliveryStatus @default(PENDING)
+  deliveryNoteUrl     String?
+  proofOfDeliveryUrl  String?
+  scheduledDate       DateTime
+  actualDeliveredAt   DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime @default(now())
+}
